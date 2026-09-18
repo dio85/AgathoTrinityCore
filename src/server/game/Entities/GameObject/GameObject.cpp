@@ -3456,55 +3456,81 @@ void GameObject::Use(Unit* user, bool ignoreCastInProgress /*= false*/)
                 GetGOInfo()->UILink.spell,
                 player->GetGUID().ToString());
 
-            if (GetGOInfo()->UILink.PlayerInteractionType)
-            {
-                WorldPackets::NPC::NPCInteractionOpenResult npcInteraction;
-                npcInteraction.Npc = GetGUID();
-                npcInteraction.InteractionType = static_cast<PlayerInteractionType>(GetGOInfo()->UILink.PlayerInteractionType);
-                npcInteraction.Success = true;
-                player->SendDirectMessage(npcInteraction.Write());
+            WorldPackets::GameObject::GameObjectInteraction gameObjectUILink;
+            gameObjectUILink.ObjectGUID = GetGUID();
 
-                TC_LOG_DEBUG("housing", "  -> Sent SMSG_NPC_INTERACTION_OPEN_RESULT: npc={} interactionType={} success=true",
-                    GetGUID().ToString(), GetGOInfo()->UILink.PlayerInteractionType);
+            switch (GetGOInfo()->UILink.UILinkType)
+            {
+            case 0:
+                gameObjectUILink.InteractionType = PlayerInteractionType::AdventureJournal;
+                player->SendDirectMessage(gameObjectUILink.Write());
+                break;
+
+            case 1:
+                gameObjectUILink.InteractionType = PlayerInteractionType::ObliterumForge;
+                player->SendDirectMessage(gameObjectUILink.Write());
+                break;
+
+            case 2:
+                gameObjectUILink.InteractionType = PlayerInteractionType::ScrappingMachine;
+                player->SendDirectMessage(gameObjectUILink.Write());
+                break;
+
+            case 3:
+                gameObjectUILink.InteractionType = PlayerInteractionType::ItemInteraction;
+                player->SendDirectMessage(gameObjectUILink.Write());
+                break;
+
+            case 4:
+            {
+                gameObjectUILink.InteractionType = PlayerInteractionType::CornerstoneInteraction;
+                player->SendDirectMessage(gameObjectUILink.Write());
+
+                TC_LOG_DEBUG("housing", "  -> Sent SMSG_GAME_OBJECT_INTERACTION: object={} interactionType={}",
+                    GetGUID().ToString(),
+                    static_cast<uint32>(gameObjectUILink.InteractionType));
+
+                player->PlayerTalkClass->GetInteractionData().StartInteraction(
+                    player->GetGUID(),
+                    PlayerInteractionType::CornerstoneInteraction);
 
                 uint32 spellId = GetGOInfo()->UILink.spell;
 
-                // Per-plot cornerstone GOs from DB2 CASC data have spell=0 in their
-                // template.  The master template (entry 457142) has Data8=1266097 but
-                // the actual per-plot entries do not.  Fall back to the known spell
-                // for CornerstoneInteraction (type 70).
-                if (!spellId && GetGOInfo()->UILink.PlayerInteractionType == 70)
-                    spellId = 1266097; // [DNT] Trigger Convo for Unowned Plot
-
                 if (spellId)
                 {
-                    TC_LOG_DEBUG("housing", "  -> Casting spell {} on player", spellId);
-                    player->CastSpell(player, spellId, true);
+                    TC_LOG_DEBUG("housing", "  -> Casting cornerstone spell {} on player", spellId);
+                    player->CastSpell(player, spellId, DIFFICULTY_NONE);
                 }
+
+                break;
             }
-            else
+
+            default:
             {
-                WorldPackets::GameObject::GameObjectInteraction gameObjectUILink;
-                gameObjectUILink.ObjectGUID = GetGUID();
-                switch (GetGOInfo()->UILink.UILinkType)
+                if (GetGOInfo()->UILink.PlayerInteractionType)
                 {
-                    case 0:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::AdventureJournal;
-                        break;
-                    case 1:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::ObliterumForge;
-                        break;
-                    case 2:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::ScrappingMachine;
-                        break;
-                    case 3:
-                        gameObjectUILink.InteractionType = PlayerInteractionType::ItemInteraction;
-                        break;
-                    default:
-                        break;
+                    gameObjectUILink.InteractionType =
+                        static_cast<PlayerInteractionType>(GetGOInfo()->UILink.PlayerInteractionType);
+
+                    player->SendDirectMessage(gameObjectUILink.Write());
+
+                    TC_LOG_DEBUG("housing", "  -> Sent SMSG_GAME_OBJECT_INTERACTION: object={} interactionType={}",
+                        GetGUID().ToString(),
+                        static_cast<uint32>(gameObjectUILink.InteractionType));
+
+                    uint32 spellId = GetGOInfo()->UILink.spell;
+
+                    if (spellId)
+                    {
+                        TC_LOG_DEBUG("housing", "  -> Casting spell {} on player", spellId);
+                        player->CastSpell(player, spellId, false);
+                    }
                 }
-                player->SendDirectMessage(gameObjectUILink.Write());
+
+                break;
             }
+            }
+
             return;
         }
         case GAMEOBJECT_TYPE_GATHERING_NODE:                //50
